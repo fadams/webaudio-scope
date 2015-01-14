@@ -41,17 +41,18 @@ about:config
 search for "getusermedia"
 
 ````
-media.getusermedia.agc_enabled media.getusermedia.aec_enabled
+media.getusermedia.agc_enabled
+media.getusermedia.aec_enabled
 ````
 
 (Automatic Gain Control & Acoustic Echo Cancellation) should both be set to false.
 
 It would be nice if these were controllable via getUserMedia constraints, but for
-Firefox at least a global about:config setting is currently required.
+Firefox at least a global **about:config** setting is currently required.
 
 **_"Disappearing" Microphone input_**  
-MediaStreamAudioSourceNode get prematurely garbage-collected due to a bug in Firefox
- https://bugzilla.mozilla.org/show_bug.cgi?id=934512 which causes the microphone
+A MediaStreamAudioSourceNode will get prematurely garbage-collected due to a bug in Firefox
+ https://bugzilla.mozilla.org/show_bug.cgi?id=934512, which causes the microphone
 to spontaneously switch off after five or so seconds. This normally occurs because
 the MediaStreamAudioSourceNode tends to get created in the getUserMedia success
 callback in a line like this:
@@ -62,7 +63,19 @@ var input = context.createMediaStreamSource(stream);
 
 The issue (for Firefox) is the local reference in the scope of the gUM success
 callback. If, however, we use a more global reference to the input variable it
-won't get prematurely garbage-collected.
+won't get prematurely garbage-collected:
+
+````
+var input;
+
+...
+...
+...
+
+
+// In the getUserMedia success callback - note the use of the "global" reference.
+input = context.createMediaStreamSource(stream);
+````
 
 **Chrome (39.0.2171.99 (64-bit)) & Opera (Using opera 26.0):**  
 **_ScriptProcessorNodes "randomly" stop processing_**  
