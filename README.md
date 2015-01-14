@@ -34,6 +34,7 @@ https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode
 A couple of browser quirks caused a bit of pain as I was experimenting with getUserMedia and WebAudio.
 
 **Firefox (Using FF 34):**
+
 1. By default Firefox getUserMedia seemed to be horribly distorted, but worked
 fine on Chrome and Opera. I *eventually* tracked it down to Firefox doing some
 post-processing of the input by default.
@@ -52,6 +53,7 @@ media.getusermedia.agc_enabled media.getusermedia.aec_enabled
 
 It would be nice if these were controllable via getUserMedia constraints, but for
 Firefox at least a global about:config setting is currently required.
+
 2. MediaStreamAudioSourceNode get prematurely garbage-collected due to a bug in Firefox
  https://bugzilla.mozilla.org/show_bug.cgi?id=934512 which causes the microphone
 to spontaneously switch off after five or so seconds. This normally occurs because
@@ -67,6 +69,7 @@ callback. If, however, we use a more global reference to the input variable it
 won't get prematurely garbage-collected.
 
 **Chrome (39.0.2171.99 (64-bit)) & Opera (Using opera 26.0):**
+
 1. Chrome and Opera have their own premature garbage-collection issue. In their
 case it relates to ScriptProcessorNodes (not actually used in webaudio-scope).
 
@@ -79,9 +82,7 @@ http://www.w3.org/TR/webaudio/#lifetime-AudioNode (clause 3.)
 but with Chrome and Opera the ScriptProcessorNode gets garbage collected when the
 normal object reference goes out of scope. This is a bug covered in these references:
 
-https://bugs.webkit.org/show_bug.cgi?id=112521
-
-https://code.google.com/p/chromium/issues/detail?id=82795
-
+https://bugs.webkit.org/show_bug.cgi?id=112521  
+https://code.google.com/p/chromium/issues/detail?id=82795  
 http://sriku.org/blog/2013/01/30/taming-the-scriptprocessornode
 
