@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="description" content="webaudio-scope : Simple self-contained demo of HTML5 Web Audio APIs used with the WebRTC  getUserMedia API used to capture live audio input.">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>webaudio-scope</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/fadams/webaudio-scope">View on GitHub</a>
+
+          <h1 id="project_title">webaudio-scope</h1>
+          <h2 id="project_tagline">Simple self-contained demo of HTML5 Web Audio APIs used with the WebRTC  getUserMedia API used to capture live audio input.</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/fadams/webaudio-scope/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/fadams/webaudio-scope/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h1>
+<a id="live-demo" class="anchor" href="#live-demo" aria-hidden="true"><span class="octicon octicon-link"></span></a><a href="https://github.com/fadams/webaudio-scope/blob/master/scope.html">Live Demo</a>
+</h1>
+
+<h1>
+<a id="webaudio-scope" class="anchor" href="#webaudio-scope" aria-hidden="true"><span class="octicon octicon-link"></span></a>webaudio-scope</h1>
+
+<p>Simple self-contained demo of HTML5 Web Audio APIs used with the WebRTC getUserMedia API
+used to capture live audio input from the microphone.</p>
+
+<p>It doesn't do anything terribly exciting, it just loops the input stream to the
+output and renders a simple oscilloscope visualisation.</p>
+
+<p>The main aim is just to play with the API and include references to the APIs used
+so I can find them quickly again :-)</p>
+
+<p><strong>WebRTC:</strong></p>
+
+<p><a href="https://developer.mozilla.org/en-US/docs/NavigatorUserMedia.getUserMedia">https://developer.mozilla.org/en-US/docs/NavigatorUserMedia.getUserMedia</a></p>
+
+<pre><code>navigator.getUserMedia(constraints, successCallback, errorCallback);
+</code></pre>
+
+<p><a href="https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_API#LocalMediaStream">https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_API#LocalMediaStream</a></p>
+
+<p><strong>WebAudio:</strong></p>
+
+<p><a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API">https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API</a><br>
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Basic_concepts_behind_Web_Audio_API">https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Basic_concepts_behind_Web_Audio_API</a><br>
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/AudioContext">https://developer.mozilla.org/en-US/docs/Web/API/AudioContext</a><br>
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/AudioNode">https://developer.mozilla.org/en-US/docs/Web/API/AudioNode</a><br>
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode">https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode</a><br>
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode">https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode</a>  </p>
+
+<p><strong>"Interesting" Browser Issues</strong><br>
+A couple of browser quirks caused a bit of pain as I was experimenting with getUserMedia and WebAudio.</p>
+
+<p><strong>Firefox (Using FF 34):</strong><br>
+<strong><em>Distorted Audio (a sort of "wobbly" sound)</em></strong><br>
+By default Firefox getUserMedia seemed to be horribly distorted, but worked
+fine on Chrome and Opera. I <em>eventually</em> tracked it down to Firefox doing some
+post-processing of the input by default.</p>
+
+<pre><code>about:config
+</code></pre>
+
+<p>search for "getusermedia"</p>
+
+<pre><code>media.getusermedia.agc_enabled
+media.getusermedia.aec_enabled
+</code></pre>
+
+<p>(Automatic Gain Control &amp; Acoustic Echo Cancellation) should both be set to false.</p>
+
+<p>It would be nice if these were controllable via getUserMedia constraints, but for
+Firefox at least a global <strong>about:config</strong> setting is currently required.</p>
+
+<p><strong><em>"Disappearing" Microphone input</em></strong><br>
+A MediaStreamAudioSourceNode will get prematurely garbage-collected due to a bug in Firefox
+ <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=934512">https://bugzilla.mozilla.org/show_bug.cgi?id=934512</a>, which causes the microphone
+to spontaneously switch off after five or so seconds. This normally occurs because
+the MediaStreamAudioSourceNode tends to get created in the getUserMedia success
+callback in a line like this:</p>
+
+<pre><code>var input = context.createMediaStreamSource(stream);
+</code></pre>
+
+<p>The issue (for Firefox) is the local reference in the scope of the gUM success
+callback. If, however, we use a more global reference to the input variable it
+won't get prematurely garbage-collected:</p>
+
+<pre><code>var input;
+
+...
+...
+
+// In the getUserMedia success callback
+// Note the use of the "global" reference.
+input = context.createMediaStreamSource(stream);
+</code></pre>
+
+<p><strong>Chrome (39.0.2171.99 (64-bit)) &amp; Opera (Using opera 26.0):</strong><br>
+<strong><em>ScriptProcessorNodes "randomly" stop processing</em></strong><br>
+Chrome and Opera have their own premature garbage-collection issue. In their
+case it relates to ScriptProcessorNodes (not actually used in webaudio-scope).</p>
+
+<p>An AudioNode <em>should</em> live as long as there are any references to it <em>including</em>
+a connection reference which occurs if another AudioNode is connected to it. As
+per the specification:</p>
+
+<p><a href="http://www.w3.org/TR/webaudio/#lifetime-AudioNode">http://www.w3.org/TR/webaudio/#lifetime-AudioNode</a> (clause 3.)</p>
+
+<p>but with Chrome and Opera the ScriptProcessorNode gets garbage collected when the
+normal object reference goes out of scope. This is a bug covered in these references:</p>
+
+<p><a href="https://bugs.webkit.org/show_bug.cgi?id=112521">https://bugs.webkit.org/show_bug.cgi?id=112521</a><br>
+<a href="https://code.google.com/p/chromium/issues/detail?id=82795">https://code.google.com/p/chromium/issues/detail?id=82795</a><br>
+<a href="http://sriku.org/blog/2013/01/30/taming-the-scriptprocessornode">http://sriku.org/blog/2013/01/30/taming-the-scriptprocessornode</a></p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">webaudio-scope maintained by <a href="https://github.com/fadams">fadams</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
