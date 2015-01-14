@@ -9,20 +9,25 @@ The main aim is just to play with the API and include references to the APIs use
 so I can find them quickly again :-)
 
 **WebRTC:**
-https://developer.mozilla.org/en-US/docs/NavigatorUserMedia.getUserMedia
 
-    navigator.getUserMedia(constraints,
-	    				   successCallback,
-	    				   errorCallback);
+https://developer.mozilla.org/en-US/docs/NavigatorUserMedia.getUserMedia
+````
+navigator.getUserMedia(constraints, successCallback, errorCallback);
+````
 https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_API#LocalMediaStream
 
 **WebAudio:**
+
 https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API
+
 https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Basic_concepts_behind_Web_Audio_API
 
 https://developer.mozilla.org/en-US/docs/Web/API/AudioContext
+
 https://developer.mozilla.org/en-US/docs/Web/API/AudioNode
+
 https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode
+
 https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode
 
 **"Interesting" Browser Issues**
@@ -33,12 +38,15 @@ A couple of browser quirks caused a bit of pain as I was experimenting with getU
 fine on Chrome and Opera. I *eventually* tracked it down to Firefox doing some
 post-processing of the input by default.
 
-
-> about:config
+````
+about:config
+````
 
 search for "getusermedia"
 
-> media.getusermedia.agc_enabled media.getusermedia.aec_enabled
+````
+media.getusermedia.agc_enabled media.getusermedia.aec_enabled
+````
 
 (Automatic Gain Control & Acoustic Echo Cancellation) should both be set to false.
 
@@ -50,7 +58,9 @@ to spontaneously switch off after five or so seconds. This normally occurs becau
 the MediaStreamAudioSourceNode tends to get created in the getUserMedia success
 callback in a line like this:
 
-> var input = context.createMediaStreamSource(stream);
+````
+var input = context.createMediaStreamSource(stream);
+````
 
 The issue (for Firefox) is the local reference in the scope of the gUM success
 callback. If, however, we use a more global reference to the input variable it
@@ -70,6 +80,8 @@ but with Chrome and Opera the ScriptProcessorNode gets garbage collected when th
 normal object reference goes out of scope. This is a bug covered in these references:
 
 https://bugs.webkit.org/show_bug.cgi?id=112521
+
 https://code.google.com/p/chromium/issues/detail?id=82795
+
 http://sriku.org/blog/2013/01/30/taming-the-scriptprocessornode
 
