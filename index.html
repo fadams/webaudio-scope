@@ -1,146 +1,257 @@
-<!DOCTYPE html>
+<!DOCTYPE html> <!-- HTML5 doctype -->
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+  
+    http://www.apache.org/licenses/LICENSE-2.0
+  
+  Unless required by applicable law or agreed to in writing,
+  software distributed under the License is distributed on an
+  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  KIND, either express or implied.  See the License for the
+  specific language governing permissions and limitations
+  under the License.
+-->
 <html>
 
-  <head>
-    <meta charset='utf-8'>
-    <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <meta name="description" content="webaudio-scope : Simple self-contained demo of HTML5 Web Audio APIs used with the WebRTC  getUserMedia API used to capture live audio input.">
+<head>
+	<title>Web Audio Scope</title>
+	<meta http-equiv="content-type" content="text/html;charset=utf-8" />
 
-    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+    <!--
+     Simple self-contained demo of HTML5 Web Audio APIs used with the WebRTC
+     getUserMedia API used to capture live audio input.
 
-    <title>webaudio-scope</title>
-  </head>
+     It doesn't do anything terribly exciting, it just loops the input stream to
+     the output and renders a simple oscilloscope visualisation. The main aim is
+     just to play with the API and include references to the APIs used so I can
+     find them quickly again :-)
+ 
+     WebRTC:
+     https://developer.mozilla.org/en-US/docs/NavigatorUserMedia.getUserMedia
+     e.g. navigator.getUserMedia(constraints, successCallback, errorCallback);
+     https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_API#LocalMediaStream
 
-  <body>
+     WebAudio:
+     https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API
+     https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Basic_concepts_behind_Web_Audio_API
+     https://developer.mozilla.org/en-US/docs/Web/API/AudioContext
+     https://developer.mozilla.org/en-US/docs/Web/API/AudioNode
+     https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode
+     https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode
+    -->
 
-    <!-- HEADER -->
-    <div id="header_wrap" class="outer">
-        <header class="inner">
-          <a id="forkme_banner" href="https://github.com/fadams/webaudio-scope">View on GitHub</a>
+<style>
 
-          <h1 id="project_title">webaudio-scope</h1>
-          <h2 id="project_tagline">Simple self-contained demo of HTML5 Web Audio APIs used with the WebRTC  getUserMedia API used to capture live audio input.</h2>
+body
+{
+	width: 100%;
+    margin: 0;
 
-            <section id="downloads">
-              <a class="zip_download_link" href="https://github.com/fadams/webaudio-scope/zipball/master">Download this project as a .zip file</a>
-              <a class="tar_download_link" href="https://github.com/fadams/webaudio-scope/tarball/master">Download this project as a tar.gz file</a>
-            </section>
+	font: 13px/1.5 Helvetica, Arial, 'Liberation Sans', FreeSans, sans-serif;
+    overflow-x: hidden; /* Hide horizontal scrollbar */
+    background: #dddddd;
+}
+
+h1 {
+    font-size: 3rem;
+    font-family: 'Nova Square', cursive;
+    text-align: center;
+    color: black;
+    text-shadow: -1px -1px 1px #aaa,
+                 0px 1px 1px rgba(255,255,255,0.5),
+                 1px 1px 2px rgba(255,255,255,0.7),
+                 0px 0px 2px rgba(255,255,255,0.4);
+    margin: 0;
+}
+
+.wrapper {
+    height: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+canvas {
+    background: #003131;
+    border-radius: 10px;
+    border-top: 1px solid black;
+    border-bottom: 1px solid black;
+    margin-bottom: -3px;
+    box-shadow: 0 -2px 4px rgba(0,0,0,0.7),
+                0 3px 4px rgba(0,0,0,0.7);
+}
+
+</style>
+
+</head>
+
+<body>
+    <div class="wrapper">
+        <header>
+            <h1>Web Audio Scope</h1>
         </header>
+
+        <canvas id="scope" width="640" height="300"></canvas> 
     </div>
+</body>
 
-    <!-- MAIN CONTENT -->
-    <div id="main_content_wrap" class="outer">
-      <section id="main_content" class="inner">
-        <h1>
-<a id="live-demo" class="anchor" href="#live-demo" aria-hidden="true"><span class="octicon octicon-link"></span></a><a href="https://cdn.rawgit.com/fadams/webaudio-scope/master/scope.html">Live Demo</a>
-</h1>
 
-<h1>
-<a id="webaudio-scope" class="anchor" href="#webaudio-scope" aria-hidden="true"><span class="octicon octicon-link"></span></a>webaudio-scope</h1>
+<script type="text/javascript">
 
-<p>Simple self-contained demo of HTML5 Web Audio APIs used with the WebRTC getUserMedia API
-used to capture live audio input from the microphone.</p>
+// Shim getUserMedia for multiple browser prefixes.
+navigator.getUserMedia = (navigator.getUserMedia ||
+                          navigator.webkitGetUserMedia ||
+                          navigator.mozGetUserMedia ||
+                          navigator.msGetUserMedia);
 
-<p>It doesn't do anything terribly exciting, it just loops the input stream to the
-output and renders a simple oscilloscope visualisation.</p>
+// Shim AudioContext for multiple browser prefixes.
+window.AudioContext = window.AudioContext || window.webkitAudioContext;
 
-<p>The main aim is just to play with the API and include references to the APIs used
-so I can find them quickly again :-)</p>
+if (window.AudioContext) {
+    // Create AudioContext.
+    var context = new AudioContext();
+    console.log("Sample Rate = " + context.sampleRate);
 
-<p><strong>WebRTC:</strong></p>
+    /**
+     * Maintain a longer lived reference to the MediaStreamAudioSourceNode
+     * created in the getUserMedia callback due to a Firefox bug that results in
+     * premature garbage collection https://bugzilla.mozilla.org/show_bug.cgi?id=934512
+     */
+    var input;
 
-<p><a href="https://developer.mozilla.org/en-US/docs/NavigatorUserMedia.getUserMedia">https://developer.mozilla.org/en-US/docs/NavigatorUserMedia.getUserMedia</a></p>
+    var Oscilloscope = function(canvasName) {
+        // set up canvas context for scope
+        this.canvas = document.getElementById(canvasName);
+        var intendedWidth = document.querySelector('.wrapper').clientWidth;
+        this.canvas.setAttribute('width',intendedWidth);
+    };
 
-<pre><code>navigator.getUserMedia(constraints, successCallback, errorCallback);
-</code></pre>
+    Oscilloscope.prototype.connect = function(analyser) {
+        analyser.fftSize = 2048;
+        analyser.minDecibels = -90;
+        analyser.maxDecibels = -10;
+        analyser.smoothingTimeConstant = 0.85;
 
-<p><a href="https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_API#LocalMediaStream">https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_API#LocalMediaStream</a></p>
+        var WIDTH = this.canvas.width;
+        var HEIGHT = this.canvas.height;
+        var NORMALISATION = HEIGHT/256;
+        var TRIGGER = 134;  // 128 == zero. this is the "trigger" level.
 
-<p><strong>WebAudio:</strong></p>
+        var bufferLength = analyser.fftSize;
 
-<p><a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API">https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API</a><br>
-<a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Basic_concepts_behind_Web_Audio_API">https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Basic_concepts_behind_Web_Audio_API</a><br>
-<a href="https://developer.mozilla.org/en-US/docs/Web/API/AudioContext">https://developer.mozilla.org/en-US/docs/Web/API/AudioContext</a><br>
-<a href="https://developer.mozilla.org/en-US/docs/Web/API/AudioNode">https://developer.mozilla.org/en-US/docs/Web/API/AudioNode</a><br>
-<a href="https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode">https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode</a><br>
-<a href="https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode">https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode</a>  </p>
+        var dataArray = new Uint8Array(bufferLength);
+        var canvasCtx = this.canvas.getContext('2d');
+        canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
 
-<p><strong>"Interesting" Browser Issues</strong><br>
-A couple of browser quirks caused a bit of pain as I was experimenting with getUserMedia and WebAudio.</p>
+        var findZeroCrossing = function(buf, buflen) {
+            var i = 0;
+            var last_zero = -1;
+            var t;
 
-<p><strong>Firefox (Using FF 34):</strong><br>
-<strong><em>Distorted Audio (a sort of "wobbly" sound)</em></strong><br>
-By default Firefox getUserMedia seemed to be horribly distorted, but worked
-fine on Chrome and Opera. I <em>eventually</em> tracked it down to Firefox doing some
-post-processing of the input by default.</p>
+            // Increment until <= 0 or we reach the end of the buffer
+            while (i < buflen && (buf[i] > 128)) {
+                i++;
+            }
 
-<pre><code>about:config
-</code></pre>
+            // Increment until we're above TRIGGER, keeping track of last zero.
+            while (i < buflen && ((t = buf[i]) < TRIGGER)) {
+                if (t >= 128) {
+                    if (last_zero == -1) {
+                        last_zero = i;
+                    }
+                } else {
+                    last_zero = -1;
+                }
+                i++;
+            }
 
-<p>search for "getusermedia"</p>
+            // we may have jumped over TRIGGER in one sample.
+            if (last_zero === -1) {
+                last_zero = i;
+            }
 
-<pre><code>media.getusermedia.agc_enabled
-media.getusermedia.aec_enabled
-</code></pre>
+            // We didn't find any positive zero crossings
+            if (i >= buflen) {
+                return 0;
+            }
 
-<p>(Automatic Gain Control &amp; Acoustic Echo Cancellation) should both be set to false.</p>
+            return last_zero;
+        };
 
-<p>It would be nice if these were controllable via getUserMedia constraints, but for
-Firefox at least a global <strong>about:config</strong> setting is currently required.</p>
+        var draw = function() {
+            var drawVisual = requestAnimationFrame(draw);
 
-<p><strong><em>"Disappearing" Microphone input</em></strong><br>
-A MediaStreamAudioSourceNode will get prematurely garbage-collected due to a bug in Firefox
- <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=934512">https://bugzilla.mozilla.org/show_bug.cgi?id=934512</a>, which causes the microphone
-to spontaneously switch off after five or so seconds. This normally occurs because
-the MediaStreamAudioSourceNode tends to get created in the getUserMedia success
-callback in a line like this:</p>
+            analyser.getByteTimeDomainData(dataArray);
+            canvasCtx.fillStyle='#003131';
 
-<pre><code>var input = context.createMediaStreamSource(stream);
-</code></pre>
+            canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#ffff00';
+            canvasCtx.beginPath();
 
-<p>The issue (for Firefox) is the local reference in the scope of the gUM success
-callback. If, however, we use a more global reference to the input variable it
-won't get prematurely garbage-collected:</p>
+            var zeroCross = findZeroCrossing(dataArray, WIDTH);
 
-<pre><code>var input;
+            canvasCtx.moveTo(0, (256 - dataArray[zeroCross])*NORMALISATION);
+            for (var i = zeroCross, j=0; (j < WIDTH) && (i < dataArray.length); i++, j++) {
+    	        canvasCtx.lineTo(j, (256 - dataArray[i])*NORMALISATION);
+            }
 
-...
-...
+            canvasCtx.stroke();
+        };
 
-// In the getUserMedia success callback
-// Note the use of the "global" reference.
-input = context.createMediaStreamSource(stream);
-</code></pre>
-
-<p><strong>Chrome (39.0.2171.99 (64-bit)) &amp; Opera (Using opera 26.0):</strong><br>
-<strong><em>ScriptProcessorNodes "randomly" stop processing</em></strong><br>
-Chrome and Opera have their own premature garbage-collection issue. In their
-case it relates to ScriptProcessorNodes (not actually used in webaudio-scope).</p>
-
-<p>An AudioNode <em>should</em> live as long as there are any references to it <em>including</em>
-a connection reference which occurs if another AudioNode is connected to it. As
-per the specification:</p>
-
-<p><a href="http://www.w3.org/TR/webaudio/#lifetime-AudioNode">http://www.w3.org/TR/webaudio/#lifetime-AudioNode</a> (clause 3.)</p>
-
-<p>but with Chrome and Opera the ScriptProcessorNode gets garbage collected when the
-normal object reference goes out of scope. This is a bug covered in these references:</p>
-
-<p><a href="https://bugs.webkit.org/show_bug.cgi?id=112521">https://bugs.webkit.org/show_bug.cgi?id=112521</a><br>
-<a href="https://code.google.com/p/chromium/issues/detail?id=82795">https://code.google.com/p/chromium/issues/detail?id=82795</a><br>
-<a href="http://sriku.org/blog/2013/01/30/taming-the-scriptprocessornode">http://sriku.org/blog/2013/01/30/taming-the-scriptprocessornode</a></p>
-      </section>
-    </div>
-
-    <!-- FOOTER  -->
-    <div id="footer_wrap" class="outer">
-      <footer class="inner">
-        <p class="copyright">webaudio-scope maintained by <a href="https://github.com/fadams">fadams</a></p>
-        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
-      </footer>
-    </div>
-
+        draw();
+    };
     
 
-  </body>
+    var scope = new Oscilloscope('scope');
+
+    /**
+     * This is the success callback function for getUserMedia and it initialises
+     * the WebAudio processing graph, creating the MediaStreamAudioSourceNode
+     * representing the microphone input and connecting it to the 
+     * @param {LocalMediaStream} stream the LocalMediaStream created by the call to
+     * navigator.getUserMedia() and passed as a parameter to the success callback.
+     */
+    var initialiseAudioGraph = function(stream) {
+        // MediaStreamAudioSourceNode. N.B. explicitly using non-local reference 
+        // here due to Firefox premature garbage collection bug.
+        input = context.createMediaStreamSource(stream);
+
+        var analyser = context.createAnalyser();
+
+        // Connect the input MediaStreamAudioSourceNode to both the scope analyser
+        // and the context.destination (e.g. speakers).
+        input.connect(analyser);
+        input.connect(context.destination);
+        scope.connect(analyser);
+    };
+
+    // Capture live audio with getUserMedia.
+    if (navigator.getUserMedia) {
+        console.log("getUserMedia is supported.");
+
+        var constraints = {
+            //video: true,
+            audio: true // Only audio is required for this application.
+        };
+
+        navigator.getUserMedia(constraints, initialiseAudioGraph,
+            function(err) { // errorCallback
+                console.log("getUserMedia error occured: " + err);
+            }
+        );
+    } else {
+        console.log("getUserMedia not supported on your browser!");
+    }
+} else {
+    console.log("AudioContext not supported on your browser!");
+}
+
+</script>
+
 </html>
