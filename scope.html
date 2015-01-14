@@ -1,0 +1,257 @@
+<!DOCTYPE html> <!-- HTML5 doctype -->
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one
+  or more contributor license agreements.  See the NOTICE file
+  distributed with this work for additional information
+  regarding copyright ownership.  The ASF licenses this file
+  to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance
+  with the License.  You may obtain a copy of the License at
+  
+    http://www.apache.org/licenses/LICENSE-2.0
+  
+  Unless required by applicable law or agreed to in writing,
+  software distributed under the License is distributed on an
+  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  KIND, either express or implied.  See the License for the
+  specific language governing permissions and limitations
+  under the License.
+-->
+<html>
+
+<head>
+	<title>Web Audio Scope</title>
+	<meta http-equiv="content-type" content="text/html;charset=utf-8" />
+
+    <!--
+     Simple self-contained demo of HTML5 Web Audio APIs used with the WebRTC
+     getUserMedia API used to capture live audio input.
+
+     It doesn't do anything terribly exciting, it just loops the input stream to
+     the output and renders a simple oscilloscope visualisation. The main aim is
+     just to play with the API and include references to the APIs used so I can
+     find them quickly again :-)
+ 
+     WebRTC:
+     https://developer.mozilla.org/en-US/docs/NavigatorUserMedia.getUserMedia
+     e.g. navigator.getUserMedia(constraints, successCallback, errorCallback);
+     https://developer.mozilla.org/en-US/docs/Web/API/MediaStream_API#LocalMediaStream
+
+     WebAudio:
+     https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API
+     https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Basic_concepts_behind_Web_Audio_API
+     https://developer.mozilla.org/en-US/docs/Web/API/AudioContext
+     https://developer.mozilla.org/en-US/docs/Web/API/AudioNode
+     https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamAudioSourceNode
+     https://developer.mozilla.org/en-US/docs/Web/API/AnalyserNode
+    -->
+
+<style>
+
+body
+{
+	width: 100%;
+    margin: 0;
+
+	font: 13px/1.5 Helvetica, Arial, 'Liberation Sans', FreeSans, sans-serif;
+    overflow-x: hidden; /* Hide horizontal scrollbar */
+    background: #dddddd;
+}
+
+h1 {
+    font-size: 3rem;
+    font-family: 'Nova Square', cursive;
+    text-align: center;
+    color: black;
+    text-shadow: -1px -1px 1px #aaa,
+                 0px 1px 1px rgba(255,255,255,0.5),
+                 1px 1px 2px rgba(255,255,255,0.7),
+                 0px 0px 2px rgba(255,255,255,0.4);
+    margin: 0;
+}
+
+.wrapper {
+    height: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+canvas {
+    background: #003131;
+    border-radius: 10px;
+    border-top: 1px solid black;
+    border-bottom: 1px solid black;
+    margin-bottom: -3px;
+    box-shadow: 0 -2px 4px rgba(0,0,0,0.7),
+                0 3px 4px rgba(0,0,0,0.7);
+}
+
+</style>
+
+</head>
+
+<body>
+    <div class="wrapper">
+        <header>
+            <h1>Web Audio Scope</h1>
+        </header>
+
+        <canvas id="scope" width="640" height="300"></canvas> 
+    </div>
+</body>
+
+
+<script type="text/javascript">
+
+// Shim getUserMedia for multiple browser prefixes.
+navigator.getUserMedia = (navigator.getUserMedia ||
+                          navigator.webkitGetUserMedia ||
+                          navigator.mozGetUserMedia ||
+                          navigator.msGetUserMedia);
+
+// Shim AudioContext for multiple browser prefixes.
+window.AudioContext = window.AudioContext || window.webkitAudioContext;
+
+if (window.AudioContext) {
+    // Create AudioContext.
+    var context = new AudioContext();
+    console.log("Sample Rate = " + context.sampleRate);
+
+    /**
+     * Maintain a longer lived reference to the MediaStreamAudioSourceNode
+     * created in the getUserMedia callback due to a Firefox bug that results in
+     * premature garbage collection https://bugzilla.mozilla.org/show_bug.cgi?id=934512
+     */
+    var input;
+
+    var Oscilloscope = function(canvasName) {
+        // set up canvas context for scope
+        this.canvas = document.getElementById(canvasName);
+        var intendedWidth = document.querySelector('.wrapper').clientWidth;
+        this.canvas.setAttribute('width',intendedWidth);
+    };
+
+    Oscilloscope.prototype.connect = function(analyser) {
+        analyser.fftSize = 2048;
+        analyser.minDecibels = -90;
+        analyser.maxDecibels = -10;
+        analyser.smoothingTimeConstant = 0.85;
+
+        var WIDTH = this.canvas.width;
+        var HEIGHT = this.canvas.height;
+        var NORMALISATION = HEIGHT/256;
+        var TRIGGER = 134;  // 128 == zero. this is the "trigger" level.
+
+        var bufferLength = analyser.fftSize;
+
+        var dataArray = new Uint8Array(bufferLength);
+        var canvasCtx = this.canvas.getContext('2d');
+        canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+
+        var findZeroCrossing = function(buf, buflen) {
+            var i = 0;
+            var last_zero = -1;
+            var t;
+
+            // Increment until <= 0 or we reach the end of the buffer
+            while (i < buflen && (buf[i] > 128)) {
+                i++;
+            }
+
+            // Increment until we're above TRIGGER, keeping track of last zero.
+            while (i < buflen && ((t = buf[i]) < TRIGGER)) {
+                if (t >= 128) {
+                    if (last_zero == -1) {
+                        last_zero = i;
+                    }
+                } else {
+                    last_zero = -1;
+                }
+                i++;
+            }
+
+            // we may have jumped over TRIGGER in one sample.
+            if (last_zero === -1) {
+                last_zero = i;
+            }
+
+            // We didn't find any positive zero crossings
+            if (i >= buflen) {
+                return 0;
+            }
+
+            return last_zero;
+        };
+
+        var draw = function() {
+            var drawVisual = requestAnimationFrame(draw);
+
+            analyser.getByteTimeDomainData(dataArray);
+            canvasCtx.fillStyle='#003131';
+
+            canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#ffff00';
+            canvasCtx.beginPath();
+
+            var zeroCross = findZeroCrossing(dataArray, WIDTH);
+
+            canvasCtx.moveTo(0, (256 - dataArray[zeroCross])*NORMALISATION);
+            for (var i = zeroCross, j=0; (j < WIDTH) && (i < dataArray.length); i++, j++) {
+    	        canvasCtx.lineTo(j, (256 - dataArray[i])*NORMALISATION);
+            }
+
+            canvasCtx.stroke();
+        };
+
+        draw();
+    };
+    
+
+    var scope = new Oscilloscope('scope');
+
+    /**
+     * This is the success callback function for getUserMedia and it initialises
+     * the WebAudio processing graph, creating the MediaStreamAudioSourceNode
+     * representing the microphone input and connecting it to the 
+     * @param {LocalMediaStream} stream the LocalMediaStream created by the call to
+     * navigator.getUserMedia() and passed as a parameter to the success callback.
+     */
+    var initialiseAudioGraph = function(stream) {
+        // MediaStreamAudioSourceNode. N.B. explicitly using non-local reference 
+        // here due to Firefox premature garbage collection bug.
+        input = context.createMediaStreamSource(stream);
+
+        var analyser = context.createAnalyser();
+
+        // Connect the input MediaStreamAudioSourceNode to both the scope analyser
+        // and the context.destination (e.g. speakers).
+        input.connect(analyser);
+        input.connect(context.destination);
+        scope.connect(analyser);
+    };
+
+    // Capture live audio with getUserMedia.
+    if (navigator.getUserMedia) {
+        console.log("getUserMedia is supported.");
+
+        var constraints = {
+            //video: true,
+            audio: true // Only audio is required for this application.
+        };
+
+        navigator.getUserMedia(constraints, initialiseAudioGraph,
+            function(err) { // errorCallback
+                console.log("getUserMedia error occured: " + err);
+            }
+        );
+    } else {
+        console.log("getUserMedia not supported on your browser!");
+    }
+} else {
+    console.log("AudioContext not supported on your browser!");
+}
+
+</script>
+
+</html>
